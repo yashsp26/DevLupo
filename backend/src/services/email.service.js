@@ -2,9 +2,11 @@ import { renderTemplate } from "../utils/template.js";
 import { sendEmail } from "./mail.service.js";
 
 export const sendWelcomeEmail = async (user) => {
+  const dashboardUrl = process.env.CLIENT_URL;
+
   const html = await renderTemplate("welcome", {
     name: user.name,
-    appUrl: process.env.APP_URL,
+    dashboardUrl,
     year: new Date().getFullYear().toString(),
   });
 
@@ -32,14 +34,19 @@ export const sendForgotPasswordEmail = async (user, token) => {
 };
 
 export const sendPasswordChangedEmail = async (user) => {
+  const dashboardUrl = process.env.CLIENT_URL;
+  const recoveryUrl = `${process.env.CLIENT_URL}/forgot-password`;
+
   const html = await renderTemplate("password-changed", {
     name: user.name,
+    dashboardUrl,
+    recoveryUrl,
     year: new Date().getFullYear().toString(),
   });
 
   await sendEmail({
     to: user.email,
-    subject: "Your password has been changed",
+    subject: "Your DevLupo password has been changed",
     htmlContent: html,
   });
 };
