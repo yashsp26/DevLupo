@@ -5,16 +5,17 @@ type TextareaProps = Omit<ComponentPropsWithoutRef<'textarea'>, 'id'> & {
   error?: string
   id?: string
   label: string
+  labelClassName?: string
 }
 
-export function Textarea({ className, error, id, label, ...props }: TextareaProps) {
+export function Textarea({ className, error, id, label, labelClassName, ...props }: TextareaProps) {
   const generatedId = useId()
   const textareaId = id ?? generatedId
   const errorId = `${textareaId}-error`
 
   return (
     <label className="grid gap-2 text-sm font-medium text-text" htmlFor={textareaId}>
-      {label}
+      <span className={labelClassName}>{label}</span>
       <textarea
         aria-describedby={error ? errorId : undefined}
         aria-invalid={Boolean(error)}

@@ -38,6 +38,46 @@ const schema = z.object({
     .trim()
     .max(512, "File path cannot exceed 512 characters.")
     .optional(),
+}).superRefine((values, context) => {
+  if (!values.projectId) return;
+
+  const filePath = values.filePath?.trim();
+  if (!filePath) {
+    context.addIssue({
+      code: "custom",
+      message: "File path is required for project snippets.",
+      path: ["filePath"],
+    });
+    return;
+  }
+
+  if (filePath.includes("\0")) {
+    context.addIssue({
+      code: "custom",
+      message: "File path cannot contain null bytes.",
+      path: ["filePath"],
+    });
+  } else if (filePath.startsWith("/") || filePath.includes(":")) {
+    context.addIssue({
+      code: "custom",
+      message: "File path must be relative to the project root.",
+      path: ["filePath"],
+    });
+  } else if (filePath.includes("\\")) {
+    context.addIssue({
+      code: "custom",
+      message: "File path must use forward slashes.",
+      path: ["filePath"],
+    });
+  } else if (
+    filePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "File path must be a safe relative project path.",
+      path: ["filePath"],
+    });
+  }
 });
 
 type Values = z.infer<typeof schema>;
@@ -46,11 +86,13 @@ export function SnippetForm({
   formId,
   snippet,
   isSubmitting,
+  onEditorFullscreenChange,
   onSubmit,
 }: {
   formId: string;
   snippet?: Snippet;
   isSubmitting: boolean;
+  onEditorFullscreenChange: (isFullscreen: boolean) => void;
   onSubmit: (input: SnippetInput) => void;
 }) {
   const { data: projects } = useProjects({
@@ -82,6 +124,7 @@ export function SnippetForm({
   const filePath = watch("filePath");
   const execution = useRunExecution();
   const [stdin, setStdin] = useState("");
+  const [timeoutMs, setTimeoutMs] = useState(10000);
   const isProjectSnippet = Boolean(projectId);
   const isRunnableLanguage = language === "javascript" || language === "typescript";
 
@@ -200,6 +243,7 @@ export function SnippetForm({
                 error={errors.code?.message}
                 language={language}
                 onChange={field.onChange}
+                onFullscreenChange={onEditorFullscreenChange}
                 value={field.value}
               />
             )}
@@ -232,14 +276,27 @@ export function SnippetForm({
                   return;
                 }
 
+                if (
+                  entryPoint.includes("\0") ||
+                  entryPoint.startsWith("/") ||
+                  entryPoint.includes(":") ||
+                  entryPoint.includes("\\") ||
+                  entryPoint.split("/").some(
+                    (segment) => !segment || segment === "." || segment === "..",
+                  )
+                ) {
+                  toast.error("Enter a safe file path relative to the project root.");
+                  return;
+                }
+
                 if (isDirty) {
-                  toast.info("Project execution uses the saved project files.");
+                  toast.info("Project execution uses saved project files. Save changes to run your edits.");
                 }
 
                 execution.runProject(projectId, {
                   entryPoint,
                   stdin,
-                  timeoutMs: 10000,
+                  timeoutMs,
                 });
                 return;
               }
@@ -255,13 +312,16 @@ export function SnippetForm({
                   },
                 ],
                 stdin,
-                timeoutMs: 10000,
+                timeoutMs,
               });
             }}
             runLabel={isProjectSnippet ? "Run Project" : "Run"}
             stdin={stdin}
             onStdinChange={setStdin}
+            onClear={execution.clear}
+            onTimeoutChange={setTimeoutMs}
             state={execution.state}
+            timeoutMs={timeoutMs}
           />
         )}
       />

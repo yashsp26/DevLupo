@@ -1,7 +1,6 @@
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   Copy,
   Play,
@@ -9,6 +8,8 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import type { ExecutionPanelState } from "../../types/execution";
 
@@ -23,6 +24,9 @@ type ExecutionOutputProps = {
   runLabel?: string;
   stdin: string;
   onStdinChange: (value: string) => void;
+  timeoutMs: number;
+  onTimeoutChange: (timeoutMs: number) => void;
+  onClear: () => void;
 };
 
 const statusDetails = {
@@ -75,17 +79,20 @@ function IconButton({
   label,
   title,
   onClick,
+  disabled = false,
   children,
 }: {
   label: string;
   title?: string;
   onClick?: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       aria-label={label}
       className="neu-raised flex size-9 items-center justify-center rounded-xl text-muted transition hover:-translate-y-0.5 hover:shadow-(--shadow-elevation-3) hover:text-text active:translate-y-0 active:shadow-(--shadow-inset) focus:outline-none focus:ring-2 focus:ring-primary/40"
+      disabled={disabled}
       onClick={onClick}
       title={title ?? label}
       type="button"
@@ -102,6 +109,9 @@ export function ExecutionOutput({
   runLabel = "Run",
   stdin,
   onStdinChange,
+  timeoutMs,
+  onTimeoutChange,
+  onClear,
 }: ExecutionOutputProps) {
   const details = statusDetails[state.status];
   // const Icon = details.icon;
@@ -111,13 +121,15 @@ export function ExecutionOutput({
   const message =
     state.status === "api-error"
       ? state.message
-      : result?.error?.message || result?.stderr;
+      : result?.stderr || result?.error?.message;
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const copyOutput = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
+      toast.success("Copied to clipboard.");
     } catch {
-      // Clipboard may be unavailable in some browser contexts.
+      toast.error("Unable to copy to the clipboard.");
     }
   };
 
@@ -146,7 +158,11 @@ export function ExecutionOutput({
             {isRunning ? "Running..." : runLabel}
           </Button>
 
-          <IconButton label="Execution settings" title="Execution settings">
+          <IconButton
+            label="Execution settings"
+            onClick={() => setIsSettingsOpen((open) => !open)}
+            title="Execution settings"
+          >
             <Settings className="size-4" />
           </IconButton>
         </div>
@@ -157,6 +173,26 @@ export function ExecutionOutput({
       {/* ------------------------------------------------------- */}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {isSettingsOpen && (
+          <div className="mb-5 rounded-xl border border-border bg-app p-4">
+            <label className="grid gap-2 text-sm font-medium text-text" htmlFor="execution-timeout">
+              Timeout
+              <select
+                className="h-10 rounded-lg border border-border bg-elevated px-3 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                disabled={isRunning}
+                id="execution-timeout"
+                onChange={(event) => onTimeoutChange(Number(event.target.value))}
+                value={timeoutMs}
+              >
+                <option value={1000}>1 second</option>
+                <option value={5000}>5 seconds</option>
+                <option value={10000}>10 seconds</option>
+                <option value={30000}>30 seconds</option>
+              </select>
+            </label>
+            <p className="mt-2 text-xs text-muted">Applied to the next run. The server supports 1–30 seconds.</p>
+          </div>
+        )}
         {/* --------------------------------------------------- */}
         {/* Input */}
         {/* --------------------------------------------------- */}
@@ -177,11 +213,16 @@ export function ExecutionOutput({
           <Textarea
             className="min-h-28 font-mono text-xs leading-5"
             disabled={isRunning}
-            label=""
+            id="execution-stdin"
+            label="Input (stdin)"
+            labelClassName="sr-only"
             onChange={(event) => onStdinChange(event.target.value)}
             placeholder="Enter input for your program..."
             value={stdin}
           />
+          <p className="mt-2 text-xs text-muted">
+            Input is sent with the request. The current execution server does not attach it to the running Node process.
+          </p>
         </div>
 
         {/* --------------------------------------------------- */}
@@ -201,9 +242,12 @@ export function ExecutionOutput({
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-xs text-muted">Today, 11:42 AM</span>
-
-              <IconButton label="Delete execution" title="Delete execution">
+              <IconButton
+                disabled={isRunning}
+                label="Clear execution"
+                onClick={onClear}
+                title="Clear execution"
+              >
                 <Trash2 className="size-4" />
               </IconButton>
             </div>
@@ -300,7 +344,23 @@ export function ExecutionOutput({
               )}
             </div>
 
-            <ConsoleText>{result?.stdout?.trim() || "No output."}</ConsoleText>
+            <ConsoleText>{result?.stdout || "No output."}</ConsoleText>
+
+            {result?.stderr && (
+              <div className="mt-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-medium text-text">Error output</p>
+                  <IconButton
+                    label="Copy error output"
+                    title="Copy error output"
+                    onClick={() => copyOutput(result.stderr)}
+                  >
+                    <Copy className="size-4" />
+                  </IconButton>
+                </div>
+                <ConsoleText>{result.stderr}</ConsoleText>
+              </div>
+            )}
           </div>
         )}
 
@@ -357,23 +417,12 @@ export function ExecutionOutput({
         {/* Run history */}
         {/* --------------------------------------------------- */}
 
-        <div className="mt-5 rounded-lg border border-border bg-app">
-          <button
-            className="flex w-full items-center justify-between px-4 py-3.5 text-left transition hover:bg-elevated focus:outline-none focus:ring-2 focus:ring-primary/40"
-            type="button"
-          >
+        <div className="mt-5 rounded-lg border border-border bg-app px-4 py-3.5">
             <div className="flex items-center gap-3">
               <Clock3 className="size-4 text-muted" />
-
               <p className="text-sm font-medium text-text">Run history</p>
-
-              <span className="rounded-full bg-elevated px-2 py-0.5 text-xs text-muted">
-                3
-              </span>
             </div>
-
-            <ChevronRight className="size-4 text-muted" />
-          </button>
+            <p className="mt-2 text-xs text-muted">Run history is not available yet.</p>
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import {
   useCreateSnippet,
@@ -22,16 +22,24 @@ export function SnippetModal({
   const update = useUpdateSnippet();
 
   const formId = useId();
+  const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
 
   const mutation = snippet ? update : create;
+  const updatedAt = snippet
+    ? new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(snippet.updatedAt))
+    : null;
 
   return (
     <Modal
       bodyClassName="min-h-0 flex-1 overflow-hidden p-0"
+      disableEscapeClose={isEditorFullscreen}
       footer={
         <>
           <span className="text-xs text-muted">
-            Last updated: 2 minutes ago
+            {updatedAt ? `Last updated: ${updatedAt}` : "Unsaved snippet"}
           </span>
 
           <div className="flex items-center gap-3">
@@ -68,6 +76,7 @@ export function SnippetModal({
       <SnippetForm
         formId={formId}
         isSubmitting={mutation.isPending}
+        onEditorFullscreenChange={setIsEditorFullscreen}
         onSubmit={(payload) =>
           snippet
             ? update.mutate(
