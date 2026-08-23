@@ -13,6 +13,7 @@ type ModalProps = {
   contentClassName?: string;
   footer?: ReactNode;
   isOpen: boolean;
+  disableEscapeClose?: boolean;
   onClose: () => void;
   size?: "compact" | "default" | "medium" | "wide";
   subtitle?: string;
@@ -25,6 +26,7 @@ export function Modal({
   contentClassName = "",
   footer,
   isOpen,
+  disableEscapeClose = false,
   onClose,
   size = "default",
   subtitle,
@@ -43,7 +45,7 @@ export function Modal({
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !disableEscapeClose) {
         event.preventDefault();
         onClose();
         return;
@@ -84,7 +86,7 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       activeElement?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [disableEscapeClose, isOpen, onClose]);
 
   if (!isOpen) {
     return null;
