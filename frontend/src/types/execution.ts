@@ -1,6 +1,7 @@
 import type { SnippetLanguage } from "../features/snippets/languages";
 
 export type ExecutionStatus = "completed" | "failed" | "timeout";
+export type ExecutionRuntime = "node" | "browser";
 
 export type ExecutionLanguage = Extract<
   SnippetLanguage,
@@ -32,6 +33,24 @@ export type ExecutionError = {
   code: string | number | null;
 };
 
+export type BrowserConsoleEntry = {
+  level: "log" | "info" | "warn" | "error";
+  message: string;
+};
+
+export type BrowserExecutionRequest = {
+  id: number;
+  code: string;
+  timeoutMs: number;
+};
+
+export type BrowserExecutionCompletion = {
+  status: ExecutionStatus;
+  consoleEntries: BrowserConsoleEntry[];
+  durationMs: number;
+  error?: string;
+};
+
 export type ExecutionResult = {
   status: ExecutionStatus;
   stdout: string;
@@ -39,6 +58,8 @@ export type ExecutionResult = {
   exitCode: number | null;
   durationMs: number;
   error: ExecutionError | null;
+  runtime?: ExecutionRuntime;
+  browserConsole?: BrowserConsoleEntry[];
 };
 
 export type ExecutionPanelState =

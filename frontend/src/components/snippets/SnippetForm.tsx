@@ -1,5 +1,5 @@
 import { Controller, useForm } from "react-hook-form";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -7,8 +7,10 @@ import {
   languages,
 } from "../../features/snippets/languages";
 import { useRunExecution } from "../../services/useExecution";
+import { useBrowserExecution } from "../../services/useBrowserExecution";
 import { useProjects } from "../../services/useProjects";
 import type { Snippet, SnippetInput } from "../../types/snippet";
+import type { ExecutionRuntime } from "../../types/execution";
 import { toast } from "sonner";
 import { ExecutionOutput } from "./ExecutionOutput";
 import { Input } from "../ui/Input";
@@ -122,11 +124,25 @@ export function SnippetForm({
   const language = watch("language");
   const projectId = watch("projectId");
   const filePath = watch("filePath");
-  const execution = useRunExecution();
+  const nodeExecution = useRunExecution();
+  const browserExecution = useBrowserExecution();
   const [stdin, setStdin] = useState("");
   const [timeoutMs, setTimeoutMs] = useState(10000);
+  const [runtime, setRuntime] = useState<ExecutionRuntime>("node");
   const isProjectSnippet = Boolean(projectId);
   const isRunnableLanguage = language === "javascript" || language === "typescript";
+  const execution = runtime === "browser" ? browserExecution : nodeExecution;
+
+  useEffect(() => {
+    nodeExecution.clear();
+    browserExecution.clear();
+  }, [language]);
+
+  const changeRuntime = (nextRuntime: ExecutionRuntime) => {
+    setRuntime(nextRuntime);
+    nodeExecution.clear();
+    browserExecution.clear();
+  };
 
   return (
     <form
@@ -269,6 +285,20 @@ export function SnippetForm({
                 return;
               }
 
+              if (runtime === "browser") {
+                if (projectId) {
+                  toast.error("Browser execution is currently available for personal snippets only.");
+                  return;
+                }
+
+                browserExecution.run({
+                  code: field.value,
+                  language,
+                  timeoutMs,
+                });
+                return;
+              }
+
               if (projectId) {
                 const entryPoint = filePath?.trim();
                 if (!entryPoint) {
@@ -293,7 +323,7 @@ export function SnippetForm({
                   toast.info("Project execution uses saved project files. Save changes to run your edits.");
                 }
 
-                execution.runProject(projectId, {
+                nodeExecution.runProject(projectId, {
                   entryPoint,
                   stdin,
                   timeoutMs,
@@ -301,7 +331,7 @@ export function SnippetForm({
                 return;
               }
 
-              execution.runStandalone({
+              nodeExecution.runStandalone({
                 language,
                 framework: "node",
                 entryPoint: "index.js",
@@ -320,6 +350,10 @@ export function SnippetForm({
             onStdinChange={setStdin}
             onClear={execution.clear}
             onTimeoutChange={setTimeoutMs}
+            browserRequest={browserExecution.request}
+            onBrowserComplete={browserExecution.complete}
+            onRuntimeChange={changeRuntime}
+            runtime={runtime}
             state={execution.state}
             timeoutMs={timeoutMs}
           />
