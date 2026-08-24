@@ -11,11 +11,17 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
-import type { ExecutionPanelState } from "../../types/execution";
+import type {
+  BrowserExecutionCompletion,
+  BrowserExecutionRequest,
+  ExecutionPanelState,
+  ExecutionRuntime,
+} from "../../types/execution";
 
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Textarea } from "../ui/Textarea";
+import { BrowserPreview } from "./BrowserPreview";
 
 type ExecutionOutputProps = {
   state: ExecutionPanelState;
@@ -27,6 +33,10 @@ type ExecutionOutputProps = {
   timeoutMs: number;
   onTimeoutChange: (timeoutMs: number) => void;
   onClear: () => void;
+  runtime: ExecutionRuntime;
+  onRuntimeChange: (runtime: ExecutionRuntime) => void;
+  browserRequest?: BrowserExecutionRequest;
+  onBrowserComplete: (completion: BrowserExecutionCompletion) => void;
 };
 
 const statusDetails = {
@@ -112,6 +122,10 @@ export function ExecutionOutput({
   timeoutMs,
   onTimeoutChange,
   onClear,
+  runtime,
+  onRuntimeChange,
+  browserRequest,
+  onBrowserComplete,
 }: ExecutionOutputProps) {
   const details = statusDetails[state.status];
   // const Icon = details.icon;
@@ -147,6 +161,19 @@ export function ExecutionOutput({
         </div>
 
         <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="execution-runtime">
+            Execution runtime
+          </label>
+          <select
+            className="h-10 rounded-lg border border-border bg-app px-3 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            disabled={isRunning}
+            id="execution-runtime"
+            onChange={(event) => onRuntimeChange(event.target.value as ExecutionRuntime)}
+            value={runtime}
+          >
+            <option value="node">Node.js</option>
+            <option value="browser">Browser</option>
+          </select>
           <Button
             disabled={isRunning}
             isLoading={isRunning}
@@ -197,6 +224,12 @@ export function ExecutionOutput({
         {/* Input */}
         {/* --------------------------------------------------- */}
 
+        {runtime === "browser" ? (
+          <BrowserPreview
+            onComplete={onBrowserComplete}
+            request={browserRequest}
+          />
+        ) : (
         <div className="mb-5">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-medium text-text">Input (stdin)</p>
@@ -220,10 +253,8 @@ export function ExecutionOutput({
             placeholder="Enter input for your program..."
             value={stdin}
           />
-          <p className="mt-2 text-xs text-muted">
-            Input is sent with the request. The current execution server does not attach it to the running Node process.
-          </p>
         </div>
+        )}
 
         {/* --------------------------------------------------- */}
         {/* Status */}
@@ -258,7 +289,7 @@ export function ExecutionOutput({
         {/* Idle */}
         {/* --------------------------------------------------- */}
 
-        {state.status === "idle" && (
+        {state.status === "idle" && runtime === "node" && (
           <div className="flex min-h-60 items-center justify-center rounded-lg border border-border bg-app px-6 text-center">
             <div>
               <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-elevated">
@@ -328,7 +359,7 @@ export function ExecutionOutput({
         {/* Completed output */}
         {/* --------------------------------------------------- */}
 
-        {state.status === "completed" && (
+        {state.status === "completed" && runtime === "node" && (
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-medium text-text">Output</p>
