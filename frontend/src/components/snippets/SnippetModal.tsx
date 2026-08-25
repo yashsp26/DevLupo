@@ -66,11 +66,11 @@ export function SnippetModal({
       isOpen
       onClose={onClose}
       size="wide"
-      subtitle="Update your snippet and test your code"
+      subtitle="Edit files, run code, and preview browser projects"
       title={
         snippet
-          ? "Edit snippet"
-          : "Create snippet"
+          ? "Snippet workspace"
+          : "New snippet workspace"
       }
     >
       <SnippetForm

@@ -2,7 +2,7 @@
  * Base runner contract.
  *
  * JavaScript does not have interfaces like TypeScript,
- * so we enforce the contract at runtime.
+ * so the execution contract is enforced at runtime.
  */
 export class Runner {
   /**
@@ -12,7 +12,9 @@ export class Runner {
    * @returns {boolean}
    */
   canRun(request) {
-    throw new Error('canRun() must be implemented by the runner');
+    throw new Error(
+      "Runner must implement canRun().",
+    );
   }
 
   /**
@@ -22,6 +24,8 @@ export class Runner {
    * @returns {Promise<object>}
    */
   async run(request) {
-    throw new Error('run() must be implemented by the runner');
+    throw new Error(
+      "Runner must implement run().",
+    );
   }
 }

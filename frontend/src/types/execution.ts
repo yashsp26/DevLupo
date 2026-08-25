@@ -13,8 +13,25 @@ export type ExecutionFile = {
   content: string;
 };
 
+export type PreviewRequest = {
+  language: "html";
+  runtime: "browser";
+  entryPoint: string;
+  files: ExecutionFile[];
+};
+
+export type PreviewInfo = {
+  id: string;
+  status: string;
+  entryPoint: string;
+  url: string;
+  createdAt?: string;
+  expiresAt?: string;
+};
+
 export type RunCodeRequest = {
   language: ExecutionLanguage;
+  runtime?: ExecutionRuntime;
   framework?: string;
   entryPoint: string;
   files: ExecutionFile[];
