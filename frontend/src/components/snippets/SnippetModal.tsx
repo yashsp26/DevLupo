@@ -77,21 +77,24 @@ export function SnippetModal({
         formId={formId}
         isSubmitting={mutation.isPending}
         onEditorFullscreenChange={setIsEditorFullscreen}
-        onSubmit={(payload) =>
-          snippet
-            ? update.mutate(
-                {
-                  id: snippet.id,
-                  payload,
-                },
-                {
-                  onSuccess: onClose,
-                },
-              )
-            : create.mutate(payload, {
-                onSuccess: onClose,
-              })
-        }
+        onSubmit={async (payload, relatedUpdates) => {
+          if (!snippet) {
+            create.mutate(payload, { onSuccess: onClose });
+            return;
+          }
+
+          try {
+            await update.mutateAsync({ id: snippet.id, payload });
+            await Promise.all(
+              relatedUpdates.map((updateItem) =>
+                update.mutateAsync(updateItem),
+              ),
+            );
+            onClose();
+          } catch {
+            // Individual mutations surface their existing toast error feedback.
+          }
+        }}
         snippet={snippet}
       />
     </Modal>

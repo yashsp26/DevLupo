@@ -161,7 +161,7 @@ export function GlobalSearch() {
       )}
       {showResults && (
         <div
-          className={`neu-raised-lg absolute z-50 mt-2 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/70 bg-elevated ${mobile ? "right-0 w-[min(22rem,calc(100vw-2rem))]" : "right-0 w-96"}`}
+          className={`neu-raised-lg absolute z-50 mt-2 max-w-[calc(100vw-2rem)] overflow-visible rounded-2xl border border-border/70 bg-elevated ${mobile ? "right-0 w-[min(22rem,calc(100vw-2rem))]" : "right-0 w-96"}`}
         >
           <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
             <Select

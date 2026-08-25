@@ -2,7 +2,6 @@ import Editor from "@monaco-editor/react";
 import {
   Minimize2,
   Maximize2,
-  ChevronDown,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -12,11 +11,13 @@ import {
   type SnippetLanguage,
 } from "../../features/snippets/languages";
 import { useTheme } from "../../context/ThemeContext";
+import { Select } from "../ui/Select";
 
 type SnippetEditorProps = {
   className?: string;
   disabled?: boolean;
   error?: string;
+  filePath?: string;
   onChange: (value: string) => void;
   value: string;
   language: SnippetLanguage;
@@ -27,6 +28,7 @@ export function SnippetEditor({
   className,
   disabled = false,
   error,
+  filePath,
   language,
   onChange,
   onFullscreenChange,
@@ -36,7 +38,6 @@ export function SnippetEditor({
   const [editorTheme, setEditorTheme] = useState<"vs" | "vs-dark">(
     theme === "dark" ? "vs-dark" : "vs",
   );
-  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const toggleFullscreen = () => {
@@ -66,41 +67,29 @@ export function SnippetEditor({
     >
       {/* Editor toolbar */}
       <div className="flex shrink-0 items-center justify-between">
-        <span className="text-sm font-medium text-text">
-          Code
-        </span>
+        <div className="min-w-0">
+          <span className="block truncate text-sm font-medium text-text">
+            {filePath ? filePath.split("/").pop() : "Code"}
+          </span>
+          {filePath && (
+            <span className="block truncate text-xs font-normal text-muted">
+              {filePath}
+            </span>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <button
-              aria-expanded={isThemeMenuOpen}
-              aria-haspopup="menu"
-              className="neu-raised flex h-8 items-center gap-2 rounded-lg border border-transparent bg-elevated px-3 text-xs font-medium text-text transition hover:-translate-y-0.5"
-              onClick={() => setIsThemeMenuOpen((open) => !open)}
-              type="button"
-            >
-              {editorTheme === "vs-dark" ? "Dark" : "Light"}
-              <ChevronDown className="size-3.5 text-muted" />
-            </button>
-            {isThemeMenuOpen && (
-              <div className="absolute right-0 z-10 mt-2 w-28 rounded-lg border border-border bg-elevated p-1 shadow-lg" role="menu">
-                {(["vs", "vs-dark"] as const).map((nextTheme) => (
-                  <button
-                    className="block w-full rounded-md px-3 py-2 text-left text-xs text-text hover:bg-hover"
-                    key={nextTheme}
-                    onClick={() => {
-                      setEditorTheme(nextTheme);
-                      setIsThemeMenuOpen(false);
-                    }}
-                    role="menuitem"
-                    type="button"
-                  >
-                    {nextTheme === "vs-dark" ? "Dark" : "Light"}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <Select
+            aria-label="Editor theme"
+            className="w-24"
+            onValueChange={(value) => setEditorTheme(value as "vs" | "vs-dark")}
+            options={[
+              { value: "vs", label: "Light" },
+              { value: "vs-dark", label: "Dark" },
+            ]}
+            size="sm"
+            value={editorTheme}
+          />
 
           <button
             aria-label={isFullscreen ? "Exit expanded editor" : "Expand editor"}
