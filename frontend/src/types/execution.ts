@@ -15,6 +15,7 @@ export type ExecutionFile = {
 
 export type RunCodeRequest = {
   language: ExecutionLanguage;
+  runtime?: ExecutionRuntime;
   framework?: string;
   entryPoint: string;
   files: ExecutionFile[];

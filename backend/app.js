@@ -21,7 +21,9 @@ import searchRoutes from "./src/routes/search.routes.js";
 
 // execution routes
 import executionRoutes from "./src/execution/execution.routes.js";
-
+import executionSessionRoutes from "./src/execution/execution-session.routes.js";
+import previewRoutes from "./src/execution/preview/preview.routes.js";
+import previewPublicRoutes from "./src/execution/preview/preview-public.routes.js";
 
 import notFoundMiddleware from "./src/middleware/notFound.middleware.js";
 import errorMiddleware from "./src/middleware/error.middleware.js";
@@ -51,6 +53,8 @@ app.get("/", (req, res) => {
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+app.use("/api/v1/execution/preview-content",previewPublicRoutes);
+
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/user", userRoutes);
 app.use("/api/v1/user/avatar", avatarRoutes);
@@ -62,8 +66,12 @@ app.use("/api/v1/snippets", snippetRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/search", searchRoutes);
 
+
+
 // execution routes
 app.use("/api/v1/execution", executionRoutes);
+app.use("/api/v1/execution/sessions",executionSessionRoutes);
+app.use("/api/v1/execution/preview",previewRoutes);
 
 app.use("/api", routes);
 

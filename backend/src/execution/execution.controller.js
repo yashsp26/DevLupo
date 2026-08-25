@@ -1,9 +1,11 @@
-import { executeCode } from './execution.service.js';
+import { executeCode } from "./execution.service.js";
 import { executeProject } from "./project-execution.service.js";
 
 export async function runCode(req, res, next) {
   try {
-    const result = await executeCode(req.body);
+    const result = await executeCode(
+      req.validatedData,
+    );
 
     return res.status(200).json({
       success: true,
@@ -22,7 +24,10 @@ export async function runProject(req, res, next) {
       req.validatedData,
     );
 
-    return res.status(200).json({ success: true, data: result });
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
   } catch (error) {
     next(error);
   }
