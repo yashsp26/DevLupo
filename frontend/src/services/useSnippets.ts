@@ -39,10 +39,11 @@ const invalidate = (id?: string) =>
       : []),
   ]);
 
-export function useSnippets(params: SnippetListParams) {
+export function useSnippets(params: SnippetListParams, enabled = true) {
   return useQuery({
     queryKey: snippetQueryKeys.list(params),
     queryFn: () => snippetApi.getSnippets(params),
+    enabled,
   });
 }
 export function useSnippet(id: string | undefined) {
