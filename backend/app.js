@@ -32,12 +32,16 @@ const app = express();
 
 console.log("CLIENT_URL:", process.env.CLIENT_URL);
 
-app.use(
-  cors({
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/v1/execution/preview-content/")) {
+    return next();
+  }
+
+  return cors({
     origin: process.env.CLIENT_URL,
     credentials: true,
-  }),
-);
+  })(req, res, next);
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -53,7 +57,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use("/api/v1/execution/preview-content",previewPublicRoutes);
+app.use("/api/v1/execution/preview-content", previewPublicRoutes);
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/user", userRoutes);
@@ -66,12 +70,10 @@ app.use("/api/v1/snippets", snippetRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/search", searchRoutes);
 
-
-
 // execution routes
 app.use("/api/v1/execution", executionRoutes);
-app.use("/api/v1/execution/sessions",executionSessionRoutes);
-app.use("/api/v1/execution/preview",previewRoutes);
+app.use("/api/v1/execution/sessions", executionSessionRoutes);
+app.use("/api/v1/execution/preview", previewRoutes);
 
 app.use("/api", routes);
 
