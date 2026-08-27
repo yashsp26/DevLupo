@@ -831,7 +831,8 @@ export function SnippetForm({
           error={
             activeFile.path === primaryPath ? errors.code?.message : undefined
           }
-          filePath={activeFile.path || undefined}
+          filePath={activeFile.path}
+          files={files}
           language={activeFile.language}
           onChange={updateActiveFile}
           onFullscreenChange={onEditorFullscreenChange}

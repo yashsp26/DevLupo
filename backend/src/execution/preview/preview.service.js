@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 
 import path from "node:path";
 
+import ts from "typescript";
+
 import {
   MAX_PREVIEWS,
   PREVIEW_STATUS,
@@ -19,6 +21,7 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".css",
   ".js",
   ".mjs",
+  ".ts",
   ".json",
   ".svg",
   ".png",
@@ -28,6 +31,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".webp",
   ".ico",
 ]);
+
+const TYPESCRIPT_EXTENSIONS = new Set([".ts"]);
 
 const DEFAULT_HTML_ENTRY_POINTS = [
   "index.html",
@@ -94,7 +99,33 @@ export async function createPreview({ userId, request }) {
       throw error;
     }
 
+    /*
+     * ---------------------------------------------------------
+     * Write project
+     * ---------------------------------------------------------
+     *
+     * TypeScript files are transpiled before they are written
+     * into the browser preview directory.
+     *
+     * Existing HTML/CSS/JS files remain unchanged.
+     */
+
     await writeProjectFiles(temporaryDirectory, normalizedRequest.files);
+
+    /*
+     * ---------------------------------------------------------
+     * Resolve generated HTML
+     * ---------------------------------------------------------
+     *
+     * HTML may reference .ts files directly:
+     *
+     * <script type="module" src="./app.ts"></script>
+     *
+     * The browser cannot execute TypeScript, so those references
+     * are rewritten to the generated .js files.
+     */
+
+    await transformHtmlTypeScriptReferences(temporaryDirectory, entryPoint);
 
     const resolvedEntryPoint = resolveProjectPath(
       temporaryDirectory,
@@ -347,8 +378,316 @@ async function writeProjectFiles(directory, files) {
       recursive: true,
     });
 
+    const extension = path.extname(file.path).toLowerCase();
+
+    /*
+     * ---------------------------------------------------------
+     * TypeScript
+     * ---------------------------------------------------------
+     *
+     * Keep the original .ts file for project integrity.
+     *
+     * Generate a sibling .js file that the browser can execute.
+     */
+
+    if (TYPESCRIPT_EXTENSIONS.has(extension)) {
+      await writeTypeScriptFile(directory, file);
+
+      continue;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Existing browser files
+     * ---------------------------------------------------------
+     *
+     * HTML/CSS/JS/etc remain exactly as supplied.
+     */
+
     await writeFile(targetPath, file.content, "utf8");
   }
+}
+
+/*
+ * ============================================================
+ * TypeScript transpilation
+ * ============================================================
+ */
+
+async function writeTypeScriptFile(directory, file) {
+  const sourcePath = file.path;
+
+  const sourceExtension = path.extname(sourcePath).toLowerCase();
+
+  if (!TYPESCRIPT_EXTENSIONS.has(sourceExtension)) {
+    return;
+  }
+
+  const outputPath = replaceExtension(sourcePath, ".js");
+
+  /*
+   * Prevent a TypeScript file from silently overwriting
+   * a user-provided JavaScript file.
+   */
+
+  const existingJsPath = resolveProjectPath(directory, outputPath);
+
+  if (!existingJsPath) {
+    const error = new Error(`Invalid TypeScript output path: ${outputPath}`);
+
+    error.code = "INVALID_TYPESCRIPT_OUTPUT_PATH";
+
+    throw error;
+  }
+
+  try {
+    await readFile(existingJsPath);
+    const error = new Error(
+      `TypeScript output conflicts with an existing JavaScript file: ${outputPath}`,
+    );
+
+    error.code = "TYPESCRIPT_OUTPUT_CONFLICT";
+
+    throw error;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  let transpiled;
+
+  try {
+    transpiled = ts.transpileModule(file.content, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+
+        module: ts.ModuleKind.ESNext,
+
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+
+        sourceMap: false,
+
+        inlineSourceMap: false,
+
+        removeComments: false,
+
+        jsx: ts.JsxEmit.Preserve,
+
+        esModuleInterop: true,
+
+        allowSyntheticDefaultImports: true,
+
+        strict: false,
+      },
+
+      fileName: sourcePath,
+
+      reportDiagnostics: true,
+    });
+  } catch (error) {
+    const wrappedError = new Error(
+      `Failed to transpile TypeScript file "${sourcePath}": ${
+        error?.message || "Unknown TypeScript error."
+      }`,
+    );
+
+    wrappedError.code = "TYPESCRIPT_TRANSPILE_ERROR";
+
+    throw wrappedError;
+  }
+
+  const diagnostics = transpiled.diagnostics ?? [];
+
+  const errors = diagnostics.filter(
+    (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+  );
+
+  /*
+   * transpileModule normally reports syntax-level
+   * diagnostics. Type errors are intentionally not performed
+   * here because browser preview should remain fast.
+   */
+
+  if (errors.length) {
+    const message = formatTypeScriptDiagnostics(errors);
+
+    const error = new Error(
+      `TypeScript compilation failed for "${sourcePath}".\n${message}`,
+    );
+
+    error.code = "TYPESCRIPT_COMPILE_ERROR";
+
+    throw error;
+  }
+
+  /*
+   * TypeScript preserves module specifiers.
+   *
+   * Browser modules cannot resolve:
+   *
+   * ./message.ts
+   *
+   * so convert them to:
+   *
+   * ./message.js
+   */
+
+  const browserJavaScript = rewriteTypeScriptModuleSpecifiers(
+    transpiled.outputText,
+  );
+
+  const targetPath = resolveProjectPath(directory, outputPath);
+
+  await mkdir(path.dirname(targetPath), {
+    recursive: true,
+  });
+
+  await writeFile(targetPath, browserJavaScript, "utf8");
+}
+
+/*
+ * ============================================================
+ * TypeScript diagnostics
+ * ============================================================
+ */
+
+function formatTypeScriptDiagnostics(diagnostics) {
+  return diagnostics
+    .map((diagnostic) => {
+      return ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+    })
+    .join("\n");
+}
+
+/*
+ * ============================================================
+ * TypeScript module references
+ * ============================================================
+ */
+
+function rewriteTypeScriptModuleSpecifiers(source) {
+  /*
+   * Handles:
+   *
+   * import x from "./file.ts"
+   * import "./file.ts"
+   * export x from "./file.ts"
+   * export * from "./file.ts"
+   *
+   * and dynamic imports:
+   *
+   * import("./file.ts")
+   */
+
+  return source.replace(
+    /((?:from\s*|import\s*)["'])([^"']+)(["'])/g,
+    (fullMatch, prefix, specifier, suffix) => {
+      if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+        return fullMatch;
+      }
+
+      const rewritten = rewriteTypeScriptSpecifier(specifier);
+
+      return `${prefix}${rewritten}${suffix}`;
+    },
+  );
+}
+
+function rewriteTypeScriptSpecifier(specifier) {
+  const queryIndex = specifier.indexOf("?");
+
+  const hashIndex = specifier.indexOf("#");
+
+  const cutIndex = [queryIndex, hashIndex]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+
+  const pathname =
+    cutIndex === undefined ? specifier : specifier.slice(0, cutIndex);
+
+  const suffix = cutIndex === undefined ? "" : specifier.slice(cutIndex);
+
+  if (pathname.endsWith(".tsx")) {
+    return `${pathname.slice(0, -".tsx".length)}.js${suffix}`;
+  }
+
+  if (pathname.endsWith(".ts")) {
+    return `${pathname.slice(0, -".ts".length)}.js${suffix}`;
+  }
+
+  return specifier;
+}
+
+/*
+ * ============================================================
+ * HTML TypeScript references
+ * ============================================================
+ */
+
+async function transformHtmlTypeScriptReferences(directory, entryPoint) {
+  const htmlPath = resolveProjectPath(directory, entryPoint);
+
+  if (!htmlPath) {
+    const error = new Error("Unable to resolve HTML entry point.");
+
+    error.code = "HTML_ENTRY_POINT_RESOLUTION_FAILED";
+
+    throw error;
+  }
+
+  let html;
+
+  try {
+    html = await readFile(htmlPath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      const wrappedError = new Error(
+        `HTML entry point not found: ${entryPoint}`,
+      );
+
+      wrappedError.code = "HTML_ENTRY_POINT_NOT_FOUND";
+
+      throw wrappedError;
+    }
+
+    throw error;
+  }
+
+  /*
+   * Only rewrite script src references.
+   *
+   * Existing HTML/CSS/JS behavior remains untouched.
+   */
+
+  const transformedHtml = html.replace(
+    /(<script\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+    (fullMatch, prefix, src, suffix) => {
+      const rewritten = rewriteTypeScriptSpecifier(src);
+
+      if (rewritten === src) {
+        return fullMatch;
+      }
+
+      return `${prefix}${rewritten}${suffix}`;
+    },
+  );
+
+  if (transformedHtml !== html) {
+    await writeFile(htmlPath, transformedHtml, "utf8");
+  }
+}
+
+/*
+ * ============================================================
+ * Extension helper
+ * ============================================================
+ */
+
+function replaceExtension(filePath, extension) {
+  const currentExtension = path.extname(filePath);
+
+  return `${filePath.slice(0, -currentExtension.length)}${extension}`;
 }
 
 /*
@@ -508,7 +847,7 @@ async function startPreviewServer(rootDirectory) {
   if (!port) {
     await closeHttpServer(server);
 
-    throw new Error("Unable to determine preview server port.");
+    throw new Error("Unable to determine preview project server port.");
   }
 
   return {
@@ -613,6 +952,12 @@ async function cleanupTemporaryDirectory(directory) {
   }).catch(() => {});
 }
 
+/*
+ * ============================================================
+ * Public preview serving
+ * ============================================================
+ */
+
 export async function servePreviewRequest(previewId, requestPath, response) {
   const preview = previews.get(previewId);
 
@@ -649,6 +994,12 @@ export async function servePreviewRequest(previewId, requestPath, response) {
 
     response.status(200);
 
+    response.setHeader("Access-Control-Allow-Origin", "*");
+
+    response.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
     response.setHeader("Content-Type", getContentType(filePath));
 
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -659,6 +1010,7 @@ export async function servePreviewRequest(previewId, requestPath, response) {
      * Give it a unique/opaque browser origin so it cannot
      * access the DevLupo application origin.
      */
+
     response.setHeader(
       "Content-Security-Policy",
       "sandbox allow-scripts allow-forms allow-modals",
